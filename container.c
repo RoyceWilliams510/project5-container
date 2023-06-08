@@ -11,15 +11,19 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <wait.h>
-
+#include <string.h>
 #include "change_root.h"
 
 #define CONTAINER_ID_MAX 16
+#define CONTAINER_IMG_MAX 64
+#define MAX_ARGS 10
+
 #define CHILD_STACK_SIZE 4096 * 10
 
 typedef struct container {
   char id[CONTAINER_ID_MAX];
   // TODO: Add fields
+  char image[PATH_MAX];
 } container_t;
 
 /**
@@ -42,7 +46,9 @@ int container_exec(void* arg) {
   if (mount("/", "/", "none", MS_PRIVATE | MS_REC, NULL) < 0) {
     err(1, "mount / private");
   }
-
+  // if (stat("/some/directory", &st) == -1) {
+  //   mkdir("/some/directory", 0700);
+  // }
   // TODO: Create a overlay filesystem
   // `lowerdir`  should be the image directory: ${cwd}/images/${image}
   // `upperdir`  should be `/tmp/container/{id}/upper`
@@ -81,18 +87,51 @@ int main(int argc, char** argv) {
   getcwd(cwd, PATH_MAX);
 
   container_t container;
-  strncpy(container.id, argv[1], CONTAINER_ID_MAX);
-
   // TODO: store all necessary information to `container`
 
-  /* Use `clone` to create a child process */
-  char child_stack[CHILD_STACK_SIZE];  // statically allocate stack for child
-  int clone_flags = SIGCHLD | CLONE_NEWNS | CLONE_NEWPID;
-  int pid = clone(container_exec, &child_stack, clone_flags, &container);
-  if (pid < 0) {
-    err(1, "Failed to clone");
+  //for the path for the image
+  char path[PATH_MAX];
+  strcpy(path,cwd);
+  strcat(path,"/images/");
+  strcat(path,argv[2]);
+
+  //for the executable and arguments
+  char *command_string = argv[3];
+  char *argument_list[MAX_ARGS];
+  argument_list[0] = command_string;
+  int index = 0;
+  int pointer = 1;
+  if(argc>4){
+    index = 4;
+    while(index<argc){
+      printf("CURRENT = %s\n", argv[index]);
+      argument_list[pointer] = argv[index];
+      pointer++;
+      index ++;
+    }
+    argument_list[index] = NULL;
+  }else{
+    argument_list[1] = NULL;
+  }
+  printf("COMMAND: %s \n", command_string);
+  for (int i = 1; i< pointer; i++) {
+    printf("%s\n", argument_list[i]);
   }
 
-  waitpid(pid, NULL, 0);
-  return EXIT_SUCCESS;
+  strncpy(container.id, argv[1], CONTAINER_ID_MAX);
+  strncpy(container.image, path,PATH_MAX);
+
+  printf("IMAGE: %s \n", container.image);
+
+
+  /* Use `clone` to create a child process */
+  // char child_stack[CHILD_STACK_SIZE];  // statically allocate stack for child
+  // int clone_flags = SIGCHLD | CLONE_NEWNS | CLONE_NEWPID;
+  // int pid = clone(container_exec, &child_stack, clone_flags, &container);
+  // if (pid < 0) {
+  //   err(1, "Failed to clone");
+  // }
+
+  // waitpid(pid, NULL, 0);
+  // return EXIT_SUCCESS;
 }
