@@ -19,11 +19,13 @@
 #define MAX_ARGS 10
 
 #define CHILD_STACK_SIZE 4096 * 10
+struct stat st = {0};
 
 typedef struct container {
   char id[CONTAINER_ID_MAX];
   // TODO: Add fields
   char image[PATH_MAX];
+  char *argument_list[MAX_ARGS];
 } container_t;
 
 /**
@@ -46,15 +48,53 @@ int container_exec(void* arg) {
   if (mount("/", "/", "none", MS_PRIVATE | MS_REC, NULL) < 0) {
     err(1, "mount / private");
   }
-  // if (stat("/some/directory", &st) == -1) {
-  //   mkdir("/some/directory", 0700);
-  // }
-  // TODO: Create a overlay filesystem
-  // `lowerdir`  should be the image directory: ${cwd}/images/${image}
-  // `upperdir`  should be `/tmp/container/{id}/upper`
-  // `workdir`   should be `/tmp/container/{id}/work`
-  // `merged`    should be `/tmp/container/{id}/merged`
-  // ensure all directories exist (create if not exists) and
+ // TODO: Create a overlay filesystem
+  char container_path[PATH_MAX]; //time to define the directory paths
+  strncpy(container_path,"/tmp/container/" , PATH_MAX);
+  strcat(container_path,container->id);
+  strcat(container_path,"/");
+  
+
+  //same as lower container->image;
+  char lowerdir[PATH_MAX];   // `lowerdir`  should be the image directory: ${cwd}/images/${image}
+  
+  char upperdir[PATH_MAX]; // `upperdir`  should be `/tmp/container/{id}/upper`
+  strncpy(upperdir, container_path, PATH_MAX);
+  strcat(upperdir,"upper");
+
+  char workdir[PATH_MAX];
+  strncpy(workdir, container_path, PATH_MAX);
+  strcat(workdir,"work"); // `workdir`   should be `/tmp/container/{id}/work`
+
+  char merged[PATH_MAX];
+  strncpy(merged, container_path, PATH_MAX);
+  strcat(merged,"merged"); // `merged`    should be `/tmp/container/{id}/merged`
+
+  char all_directories[PATH_MAX];
+  strcat(all_directories, "lowerdir=");
+  strcat(all_directories,container->image);
+  strcat(all_directories,",upperdir=");
+  strcat(all_directories,upperdir);
+  strcat(all_directories,",workdir=");
+  strcat(all_directories,workdir);
+  // printf("ALL_DIRECTORIES:  %s \n", all_directories);
+
+  // ensure all directories exist (create if not exists)
+  //is this how we create the path?
+  if (stat(container_path, &st) == -1) {
+    mkdir(container_path, 0700);
+  }
+  if (stat(workdir, &st) == -1) {
+    mkdir(workdir, 0700);
+  }
+  if (stat(merged, &st) == -1) {
+    mkdir(merged, 0700);
+  }
+
+  //is it the same for lowerdir?
+
+
+  
   // call `mount("overlay", merged, "overlay", MS_RELATIME,
   //    lowerdir={lowerdir},upperdir={upperdir},workdir={workdir})`
 
@@ -97,25 +137,23 @@ int main(int argc, char** argv) {
 
   //for the executable and arguments
   char *command_string = argv[3];
-  char *argument_list[MAX_ARGS];
-  argument_list[0] = command_string;
+  container.argument_list[0] = command_string;
   int index = 0;
   int pointer = 1;
   if(argc>4){
     index = 4;
     while(index<argc){
-      printf("CURRENT = %s\n", argv[index]);
-      argument_list[pointer] = argv[index];
+      container.argument_list[pointer] = argv[index];
       pointer++;
       index ++;
     }
-    argument_list[index] = NULL;
+    container.argument_list[index] = NULL;
   }else{
-    argument_list[1] = NULL;
+    container.argument_list[1] = NULL;
   }
-  printf("COMMAND: %s \n", command_string);
+  printf("COMMAND: %s \nARGUMENTS: \n", command_string);
   for (int i = 1; i< pointer; i++) {
-    printf("%s\n", argument_list[i]);
+    printf("%s\n", container.argument_list[i]);
   }
 
   strncpy(container.id, argv[1], CONTAINER_ID_MAX);
@@ -123,15 +161,44 @@ int main(int argc, char** argv) {
 
   printf("IMAGE: %s \n", container.image);
 
+  // char container_path[PATH_MAX]; //time to define the directory paths
+  // strncpy(container_path,"/tmp/container/" , PATH_MAX);
+  // strcat(container_path,container.id);
+  // strcat(container_path,"/");
+  // printf("container_path: %s \n", container_path);
+  
+
+  // //same as lower container->image;
+  // char lowerdir[PATH_MAX];   // `lowerdir`  should be the image directory: ${cwd}/images/${image}
+  
+  // char upperdir[PATH_MAX]; // `upperdir`  should be `/tmp/container/{id}/upper`
+  // strncpy(upperdir, container_path, PATH_MAX);
+  // strcat(upperdir,"upper");
+
+  // char workdir[PATH_MAX];
+  // strncpy(workdir, container_path, PATH_MAX);
+  // strcat(workdir,"work"); // `workdir`   should be `/tmp/container/{id}/work`
+
+  // char merged[PATH_MAX];
+  // strncpy(merged, container_path, PATH_MAX);
+  // strcat(merged,"merged"); // `merged`    should be `/tmp/container/{id}/merged`
+  // char all_directories[PATH_MAX];
+  // strcat(all_directories, "lowerdir=");
+  // strcat(all_directories,container.image);
+  // strcat(all_directories,",upperdir=");
+  // strcat(all_directories,upperdir);
+  // strcat(all_directories,",workdir=");
+  // strcat(all_directories,workdir);
+  // printf("ALL_DIRECTORIES:  %s \n", all_directories);
 
   /* Use `clone` to create a child process */
-  // char child_stack[CHILD_STACK_SIZE];  // statically allocate stack for child
-  // int clone_flags = SIGCHLD | CLONE_NEWNS | CLONE_NEWPID;
-  // int pid = clone(container_exec, &child_stack, clone_flags, &container);
-  // if (pid < 0) {
-  //   err(1, "Failed to clone");
-  // }
+  char child_stack[CHILD_STACK_SIZE];  // statically allocate stack for child
+  int clone_flags = SIGCHLD | CLONE_NEWNS | CLONE_NEWPID;
+  int pid = clone(container_exec, &child_stack, clone_flags, &container);
+  if (pid < 0) {
+    err(1, "Failed to clone");
+  }
 
-  // waitpid(pid, NULL, 0);
-  // return EXIT_SUCCESS;
+  waitpid(pid, NULL, 0);
+  return EXIT_SUCCESS;
 }
